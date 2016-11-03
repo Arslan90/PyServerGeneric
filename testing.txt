@@ -1,0 +1,16 @@
+/usr/bin/python2.7 /usr/lib/pycharm-community/helpers/pydev/pydevd.py --multiproc --qt-support --client 127.0.0.1 --port 36602 --file /home/arslan/PycharmProjects/untitled/ProdServer.py
+pydev debugger: process 24422 is connecting
+
+Connected to pydev debugger (build 145.844)
+Nbr Nodes: 42659
+Nbr Edges: 97828
+Nbr VPAs: 957 (SUMO) 957 (OMNET)
+Nbr Mapped To Node: 916 To Edge: 15 To None: 26
+--- 6.02857112885 seconds ---
+Connected by client ('127.0.0.1', 55953)
+Backend TkAgg is interactive backend. Turning interactive mode on.
+Received data from client ShortestPath_218_23450702#1 4436757#1-AddedOnRampEdge 4436757#1 4436757#1-AddedOffRampEdge 5367056 5367056-AddedOffRampEdge 31415363 5367057 4008378#0 4008378#1 5367051#0 5367051#0-AddedOffRampEdge 52289956 52289963#6 52289963#7 52289967#0 52289967#1 42114717#3-AddedOnRampEdge 42114717#3 26299391#0 26299391#0-AddedOffRampEdge 26299391#1 26299391#2 26299391#3 26299391#4-AddedOnRampEdge 26299391#4 26299391#4-AddedOffRampEdge 26299391#5 26299391#6 26299391#7 49210513-AddedOnRampEdge 49210513 20294514#0 20294514#1 56743835#0 56743835#1 55289622#3 55289622#1 -69567877#3 69567885#0 -27634193#1 -27634193#0 -27777913#2 52004020#0 20301540#0 20301540#1 20301540#2;
+nbr arguments 3
+command ID ShortestPath
+nearestNodes ('4436757#1-AddedOffRampNode', '4436757#1-AddedOffRampNode') distance between the 2 0 Service duration 2411.90792608
+4436757#1-AddedOffRampNode

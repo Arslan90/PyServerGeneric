@@ -1,0 +1,59 @@
+Total Number of nodes: 16
+[Nodes Section]
+ID: 0 Coord: [110.0, 200.0]
+ID: 1 Coord: [210.0, 200.0]
+ID: 2 Coord: [310.0, 200.0]
+ID: 3 Coord: [410.0, 200.0]
+ID: 4 Coord: [10.0, 100.0]
+ID: 5 Coord: [110.0, 100.0]
+ID: 6 Coord: [210.0, 100.0]
+ID: 7 Coord: [310.0, 100.0]
+ID: 8 Coord: [410.0, 100.0]
+ID: 9 Coord: [510.0, 100.0]
+ID: 10 Coord: [110.0, 0.0]
+ID: 11 Coord: [210.0, 0.0]
+ID: 12 Coord: [310.0, 0.0]
+ID: 13 Coord: [410.0, 0.0]
+ID: 9i Coord: [520.0, 100.0]
+ID: 4i Coord: [0.0, 100.0]
+[Edges Section]
+ID: A1 From: 0 To: 1 Length: 92.0
+ID: A1R From: 1 To: 0 Length: 92.0
+ID: A2 From: 1 To: 2 Length: 90.5
+ID: A2R From: 2 To: 1 Length: 90.5
+ID: A3 From: 2 To: 3 Length: 92.0
+ID: A3R From: 3 To: 2 Length: 92.0
+ID: B0 From: 4 To: 5 Length: 93.75
+ID: B0R From: 5 To: 4 Length: 93.75
+ID: B1 From: 5 To: 6 Length: 90.5
+ID: B1R From: 6 To: 5 Length: 90.5
+ID: B2 From: 6 To: 7 Length: 90.5
+ID: B2R From: 7 To: 6 Length: 90.5
+ID: B3 From: 7 To: 8 Length: 90.5
+ID: B3R From: 8 To: 7 Length: 90.5
+ID: B4 From: 8 To: 9 Length: 93.75
+ID: B4R From: 9 To: 8 Length: 93.75
+ID: C1 From: 10 To: 11 Length: 92.0
+ID: C1R From: 11 To: 10 Length: 92.0
+ID: C2 From: 11 To: 12 Length: 90.5
+ID: C2R From: 12 To: 11 Length: 90.5
+ID: C3 From: 12 To: 13 Length: 92.0
+ID: C3R From: 13 To: 12 Length: 92.0
+ID: D1 From: 5 To: 10 Length: 92.0
+ID: D1R From: 10 To: 5 Length: 92.0
+ID: D2 From: 5 To: 0 Length: 92.0
+ID: D2R From: 0 To: 5 Length: 92.0
+ID: E1 From: 6 To: 11 Length: 90.5
+ID: E1R From: 11 To: 6 Length: 90.5
+ID: E2 From: 6 To: 1 Length: 90.5
+ID: E2R From: 1 To: 6 Length: 90.5
+ID: F1 From: 7 To: 12 Length: 90.5
+ID: F1R From: 12 To: 7 Length: 90.5
+ID: F2 From: 7 To: 2 Length: 90.5
+ID: F2R From: 2 To: 7 Length: 90.5
+ID: G1 From: 13 To: 8 Length: 92.0
+ID: G1R From: 8 To: 13 Length: 92.0
+ID: G2 From: 3 To: 8 Length: 92.0
+ID: G2R From: 8 To: 3 Length: 92.0
+ID: end From: 9 To: 9i Length: 8.5
+ID: start From: 4i To: 4 Length: 8.5

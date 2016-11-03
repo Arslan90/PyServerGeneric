@@ -1,0 +1,17 @@
+    # parser.add_argument('-h', '--host', help='IP adress of the server host', default='127.0.0.1')
+    # parser.add_argument('-p', '--port', help='Port adress of the server host', default=19999, type=int)
+    # parser.add_argument('-bS', '--buffer', help='Buffer size of the server host', default=4096, type=int)
+
+        # print "Server host IP:", args.host
+    # print "Server host port:", args.port
+    # print "Server host buffer size:", args.buffer
+
+    # HOST = args.host  # by default Local host '127.0.0.1'
+    # PORT = 19899  # by default set to port n° 19999
+    # if not (0 <= PORT <= 2**16-1):
+    #     raise ValueError("Unvalid port number")
+    # RECV_BUFFER = args.buffer # by default set to 4096
+    #
+    # server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    # server_socket.bind((HOST, PORT))
+    # server_socket.listen(0)
