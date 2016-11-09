@@ -345,7 +345,7 @@ def buildGraph(netFile, specialNetFile, graph, edgeDict, gridSpecs):
 def buildVPAMapping(netFile, omnetFile, Graph, DictEdges, sumoVPAs, radioRange, nbrCloseNeighbors):
     start_time = time.time()
     print "Building VPA Mapping"
-    mappingSerialized = mapping_checkSerialized(netFile, omnetFile, len(sumoVPAs))
+    mappingSerialized = mapping_checkSerialized(netFile, omnetFile, len(sumoVPAs), radioRange)
     print "Mapping already serialized? :", mappingSerialized
     mappingExist = os.path.isfile("serializedMaps.p")
     print "Serialized mapping exist ?:", mappingExist
@@ -372,17 +372,81 @@ def buildVPAMapping(netFile, omnetFile, Graph, DictEdges, sumoVPAs, radioRange, 
             outFile.write("\nHash digest:" + str(hashString))
 
             outFile.write("\nOmnet File:" + str(omnetFile))
-            omnetFileSize = str(os.path.getsize(omnetFile)).replace("L", "")
-            outFile.write("\nOmnet File Size in bytes:" + str(omnetFileSize))
-            hashStringOmnet = hashlib.sha224(str(omnetFile) + str(omnetFileSize)).hexdigest()
-            outFile.write("\nHash digest (Omnet):" + str(hashStringOmnet))
             nbrVPA = len(sumoVPAs)
             outFile.write("\nNbr VPA:" + str(nbrVPA))
+            outFile.write("\nRadio range:" + str(radioRange))
             outFile.close()
 
     end_time = time.time()
     print "Mapping duration:", str(end_time - start_time)
     return neighborhoodType, neighborhoodIDs
+
+def buildPathsForGraph(graph, edgeDict, map_list, map_type, nodesBySector):
+    start_time = time.time()
+    print "Building Paths for each sector"
+    pathSerialized = path_checkSerialized(graph.number_of_nodes(), graph.number_of_edges(), len(map_list))
+    print "Paths already serialized? :", pathSerialized
+    pathExist = os.path.isfile("serializedPath.p")
+    print "Serialized path exist ?:", pathExist
+    if pathExist and pathSerialized:
+        print "Proceeding to unserialization of paths"
+        # Load graph and edgeDict from a pickle file.
+        unserializedData = pickle.load( open( "serializedPath.p", "rb" ) )
+        pathDistNodesBySector = unserializedData[0]
+    else:
+        print "New building of paths between sector nodes and those mapped to VPA"
+        pathDistNodesBySector = defaultdict(defaultDictForList)
+        for k, v in nodesBySector.iteritems():
+            if k == -1:
+                continue
+            else:
+                sub_sub_start_time = time.time()
+                listVPAs = []
+                if map_type[k] is None or map_type[k] == "None":
+                    continue
+                for e in map_list[k]:
+                    if map_type[k] == "Node":
+                        listVPAs.append(e[0])
+                    elif map_type[k] == "Edge":
+                        listVPAs.append(edgeDict[e[0]][0])
+                        listVPAs.append(edgeDict[e[0]][1])
+                listVPAs = uniqueInList(listVPAs)
+                listNodes = v
+                for node1 in listNodes:
+                    if node1 in listVPAs:
+                        continue
+                    for node2 in listVPAs:
+                        if node1 == node2 or not nx.has_path(graph, node1, node2) or node2 in pathDistNodesBySector[
+                            node1]:
+                            continue
+                        else:
+                            length, path = nx.single_source_dijkstra(graph, node1, node2)
+                            # sectorNodesPathDistOtherNodes[node1][node2].append(length[node2])
+                            # sectorNodesPathDistOtherNodes[node1][node2].append(path[node2])
+                            for l in length:
+                                if l in listVPAs and not l in pathDistNodesBySector[node1]:
+                                    listLen = length[l]
+                                    listPath = path[l]
+                                    pathDistNodesBySector[node1][l].append(listLen)
+                                    pathDistNodesBySector[node1][l].append(listPath)
+                sub_sub_start_time = time.time() - sub_sub_start_time
+                print "Building duration for sub nodes path of Sector n", k, ":", sub_sub_start_time
+
+        # Save graph and edgeDict to a pickle file.
+        serializedData = [pathDistNodesBySector]
+        pickle.dump(serializedData, open("serializedPath.p", "wb"), protocol=pickle.HIGHEST_PROTOCOL)
+
+        with open("serializedPath.log", "a") as outFile:
+            outFile = open("serializedPath.log", "w")
+            outFile.write("Nbr Nodes:" + str(graph.number_of_nodes()))
+            outFile.write("\nNbr Edges:" + str(graph.number_of_edges()))
+            outFile.write("\nNbr VPAs:" + str(len(map_list)))
+            outFile.close()
+
+    end_time = time.time()
+    print "Building paths duration:", str(end_time - start_time)
+
+    return pathDistNodesBySector
 
 def initiateServerSocket(arguments):
     HOST = arguments.host # by default LocalHost 127.0.0.1
@@ -401,6 +465,7 @@ def initiateServerSocket(arguments):
 # Function for handling connections. This will be used to create threads
 def clientthread(conn, addr, buffer, serv_vars):
     # infinite loop so that function do not terminate and thread do not end.
+    nbrRequest = 0
     while True:
 
         # Receiving from client
@@ -408,9 +473,11 @@ def clientthread(conn, addr, buffer, serv_vars):
         data = conn.recv(buffer)
         if data == "CLOSE":
             print "Client (%s, %s) is going offline" % addr
+            print "Total requests served to client: ", nbrRequest
             conn.close()
             break
         else:
+            nbrRequest +=1
             tmp_str = data
             tokens = tmp_str.split('?')
             for i, val in enumerate(tokens):
@@ -452,6 +519,9 @@ def clientthread(conn, addr, buffer, serv_vars):
     # conn.close()
 
 ##################### Utility Functions #####################
+
+def defaultDictForList():
+    return defaultdict(list)
 
 def uniqueInList(my_list):
     tmp_set = set()
@@ -499,7 +569,7 @@ def graph_checkSerialized(netFile):
 
     return (serializedLogFileExist) and (netFile == oldNetFile) and (netFileSize == oldNetFileSize) and (hashString == oldHashString)
 
-def mapping_checkSerialized(netFile, omnetFile, nbrVPA):
+def mapping_checkSerialized(netFile, omnetFile, nbrVPA, radioRange):
     netFileSize = str(os.path.getsize(netFile)).replace("L", "")
     hashString = hashlib.sha224(str(netFile) + str(netFileSize)).hexdigest()
 
@@ -507,14 +577,11 @@ def mapping_checkSerialized(netFile, omnetFile, nbrVPA):
     oldNetFileSize = ""
     oldHashString = ""
 
-    omnetFileSize = str(os.path.getsize(omnetFile)).replace("L", "")
-    hashStringOmnet = hashlib.sha224(str(omnetFile) + str(omnetFileSize)).hexdigest()
-
     oldOmnetFile = ""
-    oldOmnetFileSize = ""
-    oldHashStringOmnet = ""
 
     oldNbrVPA = 0
+
+    oldRadioRange = 0.0
 
     serializedLogFileExist = os.path.isfile("serializedMaps.log")
     if serializedLogFileExist:
@@ -530,16 +597,36 @@ def mapping_checkSerialized(netFile, omnetFile, nbrVPA):
                 oldHashString = tokens[1].replace("\n", "")
             if tokens[0] == str("Omnet File"):
                 oldOmnetFile = tokens[1].replace("\n", "")
-            if tokens[0] == str("Omnet File Size in bytes"):
-                oldOmnetFileSize = tokens[1].replace("\n", "")
-            if tokens[0] == str("Hash digest (Omnet)"):
-                oldHashStringOmnet = tokens[1].replace("\n", "")
             if tokens[0] == str("Nbr VPA"):
                 oldNbrVPA = int(tokens[1].replace("\n", ""))
+            if tokens[0] == str("Radio range"):
+                oldRadioRange = float(tokens[1].replace("\n", ""))
             f_line = serializedLogFile.readline()
         serializedLogFile.close()
 
-    return (serializedLogFileExist) and (netFile == oldNetFile) and (netFileSize == oldNetFileSize) and (hashString == oldHashString) and (omnetFile == oldOmnetFile) and (omnetFileSize == oldOmnetFileSize) and (hashStringOmnet == oldHashStringOmnet) and (nbrVPA == oldNbrVPA)
+    return serializedLogFileExist and (netFile == oldNetFile) and (netFileSize == oldNetFileSize) and (hashString == oldHashString) and (omnetFile == oldOmnetFile) and  (nbrVPA == oldNbrVPA) and (radioRange == oldRadioRange)
+
+def path_checkSerialized(nbrNodes, nbrEdges, nbrVPAs):
+    oldNbrNodes = 0
+    oldNbrEdges = 0
+    oldNbrVPAs = 0
+
+    serializedLogFileExist = os.path.isfile("serializedPath.log")
+    if serializedLogFileExist:
+        serializedLogFile = open("serializedPath.log", "r")
+        f_line = serializedLogFile.readline()
+        while f_line <> "":
+            tokens = f_line.split(':')
+            if tokens[0] == str("Nbr Nodes"):
+                oldNbrNodes = int(tokens[1].replace("\n", ""))
+            if tokens[0] == str("Nbr Edges"):
+                oldNbrEdges = int(tokens[1].replace("\n", ""))
+            if tokens[0] == str("Nbr VPAs"):
+                oldNbrVPAs = int(tokens[1].replace("\n", ""))
+            f_line = serializedLogFile.readline()
+        serializedLogFile.close()
+
+    return (nbrNodes == oldNbrNodes) and (nbrEdges == oldNbrEdges) and (nbrVPAs == oldNbrVPAs)
 
 def sumo2omnet(sumo_x,sumo_y, netBound1, netBound2, margin):
     omnet_x = sumo_x - netBound1[0] + margin
@@ -708,34 +795,31 @@ def selectVPACloseNeighbors(Graph, Dict_edges, neighborhoodIDs, neighborhoodType
 def compute_NP_ALL(VPA_ID, Route,  Server_vars):
     Graph, Dict_edges = Server_vars[0], Server_vars[1]
     VPA_Mapping, VPA_Mapping_Type, NbrClosestNbhr = Server_vars[3], Server_vars[2], Server_vars[4]
+    pathDistNodesBySector = Server_vars[5]
     service_time = time.time()
-    sub_service_time = time.time()
-    tokensForEdgedRoute = Route.split(' ')
-    edgedRoute = []
-    for j, val2 in enumerate(tokensForEdgedRoute):
-        edgedRoute.append(val2)
-    sub_service_time = time.time() - sub_service_time
-    print "Service_time stage 0:", sub_service_time
-    sub_service_time = time.time()
-    nodedRoute = nodesOfEdgedRoute(Dict_edges, edgedRoute, WithFirstNode=False)
-    sub_service_time = time.time() - sub_service_time
-    print "Service_time stage 1:", sub_service_time
-    sub_service_time = time.time()
-    nearestNodes, dist, path = nearestNodeToVPA_dist_path(Graph, Dict_edges, VPA_Mapping[int(VPA_ID)],
-                                                          VPA_Mapping_Type[int(VPA_ID)], nodedRoute, NbrClosestNbhr, int(VPA_ID))
-    sub_service_time = time.time() - sub_service_time
-    print "Service_time stage 2:", sub_service_time
-    sub_service_time = time.time()
-    edgesOfNP = edgesOfNearestPoint(edgedRoute, nearestNodes[1], Dict_edges)
-    sub_service_time = time.time() - sub_service_time
-    print "Service_time stage 3:", sub_service_time
-    sub_service_time = time.time()
-    edgedRoute_NP_VPA, dist_NP_VPA = edgesOfNodedRoute(Graph, path, shortest=True)
-    sub_service_time = time.time() - sub_service_time
-    print "Service_time stage 4:", sub_service_time
-    if (dist_NP_VPA != dist):
-        print "Distance in the 2 direction are not the same\n"
-    # reversedPath.reverse()
+    if VPA_Mapping_Type[int(VPA_ID)] is None or VPA_Mapping_Type[int(VPA_ID)] == "None":
+        print "Sector ", str(VPA_ID), " mapped to None"
+        nearestNodes = ("ND","ND")
+        edgesOfNP = ("ND","ND")
+        dist = sys.maxint
+        edgedRoute_NP_VPA = ["ND"]
+    else:
+        tokensForEdgedRoute = Route.split(' ')
+        edgedRoute = []
+        for j, val2 in enumerate(tokensForEdgedRoute):
+            edgedRoute.append(val2)
+        nodedRoute = nodesOfEdgedRoute(Dict_edges, edgedRoute, WithFirstNode=False)
+        nearestNodes, dist, path = nearestNodeToVPA_dist_path(Graph, Dict_edges, VPA_Mapping[int(VPA_ID)],
+                                                              VPA_Mapping_Type[int(VPA_ID)], nodedRoute, NbrClosestNbhr, int(VPA_ID), pathDistNodesBySector)
+        edgesOfNP = edgesOfNearestPoint(edgedRoute, nearestNodes[1], Dict_edges)
+        if edgesOfNP[0] != "ND" and edgesOfNP[1] == "ND":
+            print "Must find the edge outgoing from NP in direction of VPA"
+            tmp = edgesOfNP[0]
+            edgesOfNP = (tmp,"ND") # ND => Not Defined (default value if none)
+        if path == "ND":
+            edgedRoute_NP_VPA = ["ND"]
+        else:
+            edgedRoute_NP_VPA, dist_NP_VPA = edgesOfNodedRoute(Graph, path, shortest=True)
     service_time = time.time() - service_time
     print "[VPA_NODE,NP_NODE]", str(nearestNodes), "[Edge->NP, NP->Edge]", edgesOfNP, "[Dist_NP_VPA]", str(
         dist), "[Route_NP_VPA]", str(edgedRoute_NP_VPA), "Service duration", service_time, "\n"
@@ -750,12 +834,12 @@ def compute_NP_ALL(VPA_ID, Route,  Server_vars):
     msg = [str(constx.RESPONSE), str(constx.RESPONSE_NP_ALL), str(constx.EDGE_TO_NP), str(edgesOfNP[0]),
            str(constx.NODE_NP), str(nearestNodes[1]), str(constx.EDGE_FROM_NP), str(edgesOfNP[1]),
            str(constx.NODE_VPA_MAPPING), str(nearestNodes[0]), str(constx.ROUTE_NP_VPA), str(route_as_string),
-           str(constx.ROUTE_LENGTH_NP_VPA), str(float(dist_NP_VPA))]
+           str(constx.ROUTE_LENGTH_NP_VPA), str(float(dist))]
     msg_as_string = ""
     for j in xrange(0, len(msg), 2):
         msg_as_string = msg_as_string + msg[j].decode().encode('utf-8') + ":" + msg[j + 1].decode().encode('utf-8')
         if j == len(msg) - 2:
-            msg_as_string = msg_as_string + "#"
+            msg_as_string = msg_as_string + "?"
         else:
             msg_as_string = msg_as_string + ";"
     return msg_as_string
@@ -785,7 +869,7 @@ def compute_EDGE_BEST_TRAVEL_TIME(EDGE_ID, Server_vars):
     for j in xrange(0, len(msg), 2):
         msg_as_string = msg_as_string + msg[j].decode().encode('utf-8') + ":" + msg[j + 1].decode().encode('utf-8')
         if j == len(msg) - 2:
-            msg_as_string = msg_as_string + "#"
+            msg_as_string = msg_as_string + "?"
         else:
             msg_as_string = msg_as_string + ";"
     return msg_as_string
@@ -838,10 +922,10 @@ def edgesOfNodedRoute(Graph, Route, shortest=True):
     return edgeesAlongRoad, totalLength
 
 def edgesOfNearestPoint(Route, NP_Node, edgeDict):
-    edge_to_NP = ""
-    edge_from_NP = ""
+    edge_to_NP = "ND"
+    edge_from_NP = "ND"
     for j, val2 in enumerate(Route):
-        if edge_to_NP != "" and edge_from_NP != "":
+        if edge_to_NP != "ND" and edge_from_NP != "ND":
             break
         if edgeDict[val2][0] == NP_Node:
             edge_from_NP = val2.decode().encode('utf-8')
@@ -850,10 +934,10 @@ def edgesOfNearestPoint(Route, NP_Node, edgeDict):
     edgesOfNP = (edge_to_NP, edge_from_NP)
     return edgesOfNP
 
-def nearestNodeToVPA_dist_path(Graph, edgesDict, map_list, map_type, nodedRoute, nbrCloseNeighbors, sectorId):
-    nearestNodes = (" "," ")
+def nearestNodeToVPA_dist_path(Graph, edgesDict, map_list, map_type, nodedRoute, nbrCloseNeighbors, sectorId, pathDistNodesBySector):
+    nearestNodes = ("ND","ND")
     nearestDist = sys.maxint
-    nearestPath = ""
+    nearestPath = "ND"
     closeNeighborhoodIDs, distances = selectVPACloseNeighbors(Graph, edgesDict, map_list, map_type, nodedRoute[0], nbrCloseNeighbors)
     for i, ndMapVPA in enumerate(closeNeighborhoodIDs):
         if (map_type == "None") or (map_type == None):
@@ -864,11 +948,17 @@ def nearestNodeToVPA_dist_path(Graph, edgesDict, map_list, map_type, nodedRoute,
                 if j == 0 or sectorId == nodeSectorId:
                     bool = nx.has_path(Graph,ndNodedRt, ndMapVPA[0])
                     if bool:
-                        length,path = nx.single_source_dijkstra(Graph,ndNodedRt, ndMapVPA[0])
-                        if length[ndMapVPA[0]] < nearestDist:
+                        if ndMapVPA[0] in pathDistNodesBySector[ndNodedRt]:
+                            currentLength = pathDistNodesBySector[ndNodedRt][ndMapVPA[0]][0]
+                            currentPath = pathDistNodesBySector[ndNodedRt][ndMapVPA[0]][1]
+                        else:
+                            length,path = nx.single_source_dijkstra(Graph,ndNodedRt, ndMapVPA[0])
+                            currentLength = length[ndMapVPA[0]]
+                            currentPath = path[ndMapVPA[0]]
+                        if currentLength < nearestDist:
                             nearestNodes = (ndMapVPA[0], ndNodedRt.decode().encode('utf-8'))
-                            nearestDist = length[ndMapVPA[0]]
-                            nearestPath = path[ndMapVPA[0]]
+                            nearestDist = currentLength
+                            nearestPath = currentPath
     return nearestNodes, nearestDist, nearestPath
 
 
@@ -902,44 +992,7 @@ def main(argv):
 
     neighborhoodType, neighborhoodIDs = buildVPAMapping(roadNetwork, args.omnetFile, G, dict_edges, sumo_VPAs, radioRange, nbrCloseNeighbors)
 
-    # sub_start_time = time.time()
-    # sectorNodesPathDistOtherNodes = defaultdict(lambda: defaultdict(list))
-    # for k, v in sectorNodes.iteritems():
-    #     if k == -1:
-    #         continue
-    #     else:
-    #         sub_sub_start_time = time.time()
-    #         listVPAs = []
-    #         if neighborhoodType[k] is None or neighborhoodType[k] == "None":
-    #             continue
-    #         for e in neighborhoodIDs[k]:
-    #             if neighborhoodType[k] == "Node":
-    #                 listVPAs.append(e[0])
-    #             elif neighborhoodType[k] == "Edge":
-    #                 listVPAs.append(dict_edges[e[0]][0])
-    #                 listVPAs.append(dict_edges[e[0]][1])
-    #         listVPAs = uniqueInList(listVPAs)
-    #         listNodes = v
-    #         for node1 in listNodes:
-    #             if node1 in listVPAs:
-    #                 continue
-    #             for node2 in listVPAs:
-    #                 if node1 == node2 or not nx.has_path(G,node1, node2) or node2 in sectorNodesPathDistOtherNodes[node1]:
-    #                     continue
-    #                 else:
-    #                     length, path = nx.single_source_dijkstra(G,node1, node2)
-    #                     # sectorNodesPathDistOtherNodes[node1][node2].append(length[node2])
-    #                     # sectorNodesPathDistOtherNodes[node1][node2].append(path[node2])
-    #                     for l in length:
-    #                         if l in listVPAs and not l in sectorNodesPathDistOtherNodes[node1]:
-    #                             listLen = length[l]
-    #                             listPath = path[l]
-    #                             sectorNodesPathDistOtherNodes[node1][l].append(listLen)
-    #                             sectorNodesPathDistOtherNodes[node1][l].append(listPath)
-    #         sub_sub_start_time = time.time()-sub_sub_start_time
-    #         print "Building duration for sub nodes path of Sector n",k,":",sub_sub_start_time
-    # sub_start_time = time.time()-sub_start_time
-    # print "Building duration for nodes path:", sub_start_time
+    sectorNodesPathDistOtherNodes = buildPathsForGraph(G, dict_edges, neighborhoodIDs, neighborhoodType, sectorNodes)
 
     NbrMappedToNodes = 0
     NbrMappedToEdges = 0
@@ -956,7 +1009,7 @@ def main(argv):
     print ("Nbr Mapped To Node: " + str(NbrMappedToNodes) + " To Edge: " + str(NbrMappedToEdges) + " To None: " + str(
         NbrNotMapped))
 
-    server_vars = (G, dict_edges, neighborhoodType, neighborhoodIDs, nbrCloseNeighbors)
+    server_vars = (G, dict_edges, neighborhoodType, neighborhoodIDs, nbrCloseNeighbors, sectorNodesPathDistOtherNodes)
 
     Host, Port, Buffer, server_socket = initiateServerSocket(args)
 
