@@ -327,10 +327,11 @@ def buildGraph(netFile, specialNetFile, graph, edgeDict, gridSpecs):
 
         with open("serializedGraph.log", "a") as outFile:
             outFile = open("serializedGraph.log", "w")
-            outFile.write("Network File:" + str(netFile))
+            outFile.write("# "+ str(netFile) + "\n")
+            outFile.write("Network File:" + str(os.path.basename(netFile)))
             netFileSize = str(os.path.getsize(netFile)).replace("L", "")
             outFile.write("\nNetwork File Size in bytes:" + str(netFileSize))
-            hashString = hashlib.sha224(str(netFile)+str(netFileSize)).hexdigest()
+            hashString = hashlib.sha224(str(os.path.basename(netFile))+str(netFileSize)).hexdigest()
             outFile.write("\nHash digest:" + str(hashString))
             outFile.close()
 
@@ -364,14 +365,14 @@ def buildVPAMapping(netFile, omnetFile, Graph, DictEdges, sumoVPAs, radioRange, 
 
         with open("serializedMaps.log", "a") as outFile:
             outFile = open("serializedMaps.log", "w")
-
-            outFile.write("Network File:" + str(netFile))
+            outFile.write("# "+ str(netFile) + "\n")
+            outFile.write("Network File:" + str(os.path.basename(netFile)))
             netFileSize = str(os.path.getsize(netFile)).replace("L", "")
             outFile.write("\nNetwork File Size in bytes:" + str(netFileSize))
-            hashString = hashlib.sha224(str(netFile) + str(netFileSize)).hexdigest()
+            hashString = hashlib.sha224(str(os.path.basename(netFile)) + str(netFileSize)).hexdigest()
             outFile.write("\nHash digest:" + str(hashString))
-
-            outFile.write("\nOmnet File:" + str(omnetFile))
+            outFile.write("\n# "+ str(omnetFile))
+            outFile.write("\nOmnet File:" + str(os.path.basename(omnetFile)))
             nbrVPA = len(sumoVPAs)
             outFile.write("\nNbr VPA:" + str(nbrVPA))
             outFile.write("\nRadio range:" + str(radioRange))
@@ -466,54 +467,57 @@ def initiateServerSocket(arguments):
 def clientthread(conn, addr, buffer, serv_vars):
     # infinite loop so that function do not terminate and thread do not end.
     nbrRequest = 0
+    timeout_in_seconds = 15
+    conn.setblocking(0)
     while True:
-
+        ready = select.select([conn], [], [], timeout_in_seconds)
+        if ready[0]:
         # Receiving from client
-        # time.sleep(0.01)
-        data = conn.recv(buffer)
-        if data == "CLOSE":
-            print "Client (%s, %s) is going offline" % addr
-            print "Total requests served to client: ", nbrRequest
-            conn.close()
-            break
-        else:
-            nbrRequest +=1
-            tmp_str = data
-            tokens = tmp_str.split('?')
-            for i, val in enumerate(tokens):
-                if val == "":
-                    continue
-                tokens_msg = val.split(';')
-                # for j, val2 in enumerate(tokens_msg):
-                tokens_command = tokens_msg[0].split(':')
-                msg_type = int(tokens_command[0])
-                cmd = int(tokens_command[1])
-                tokens_args = []
-                for j, val2 in enumerate(tokens_msg[1:]):
-                    tmp = val2.split(':')
-                    tokens_args.append(int(tmp[0]))
-                    tokens_args.append(tmp[1])
-                if msg_type == constx.QUERY:
-                    if cmd in constx.KNOWN_QUERIES:
-                        cmd_format = constx.FORMAT_QUERIES[cmd]
-                        error = False
-                        if len(tokens_args) != len(cmd_format):
-                            error = True
-                            for j in xrange(2, len(tokens_args), 2):
-                                if tokens_msg[j] != cmd_format[j]:
-                                    error = True
-                        if error:
-                            raise ValueError("Error query format")
-                        if cmd == constx.CMD_NP_ALL:
-                            response_msg = compute_NP_ALL(tokens_args[1], tokens_args[3], serv_vars)
-                            conn.send(response_msg)
-                        elif cmd == constx.CMD_EDGE_BEST_TRAVEL_TIME:
-                            response_msg = compute_EDGE_BEST_TRAVEL_TIME(tokens_args[1], serv_vars)
-                            conn.send(response_msg)
-                elif msg_type == constx.RESPONSE:
-                    print "Not supported for now"
-                else:
-                    raise ValueError("unrecognazible msg type received")
+        #time.sleep(0.0001)
+            data = conn.recv(buffer)
+            if data == "CLOSE":
+                print "Client (%s, %s) is going offline" % addr
+                print "Total requests served to client: ", nbrRequest
+                conn.close()
+                break
+            else:
+                nbrRequest +=1
+                tmp_str = data
+                tokens = tmp_str.split('?')
+                for i, val in enumerate(tokens):
+                    if val == "":
+                        continue
+                    tokens_msg = val.split(';')
+                    # for j, val2 in enumerate(tokens_msg):
+                    tokens_command = tokens_msg[0].split(':')
+                    msg_type = int(tokens_command[0])
+                    cmd = int(tokens_command[1])
+                    tokens_args = []
+                    for j, val2 in enumerate(tokens_msg[1:]):
+                        tmp = val2.split(':')
+                        tokens_args.append(int(tmp[0]))
+                        tokens_args.append(tmp[1])
+                    if msg_type == constx.QUERY:
+                        if cmd in constx.KNOWN_QUERIES:
+                            cmd_format = constx.FORMAT_QUERIES[cmd]
+                            error = False
+                            if len(tokens_args) != len(cmd_format):
+                                error = True
+                                for j in xrange(2, len(tokens_args), 2):
+                                    if tokens_msg[j] != cmd_format[j]:
+                                        error = True
+                            if error:
+                                raise ValueError("Error query format")
+                            if cmd == constx.CMD_NP_ALL:
+                                response_msg = compute_NP_ALL(tokens_args[1], tokens_args[3], serv_vars)
+                                conn.send(response_msg)
+                            elif cmd == constx.CMD_EDGE_BEST_TRAVEL_TIME:
+                                response_msg = compute_EDGE_BEST_TRAVEL_TIME(tokens_args[1], serv_vars)
+                                conn.send(response_msg)
+                    elif msg_type == constx.RESPONSE:
+                        print "Not supported for now"
+                    else:
+                        raise ValueError("unrecognazible msg type received")
     #
     # # came out of loop
     # conn.close()
@@ -545,8 +549,9 @@ def extractVPAIndex(validStrContainingIndex):
     return wildcardIndex, index
 
 def graph_checkSerialized(netFile):
+    netFileName = str(os.path.basename(netFile))
     netFileSize = str(os.path.getsize(netFile)).replace("L", "")
-    hashString = hashlib.sha224(str(netFile) + str(netFileSize)).hexdigest()
+    hashString = hashlib.sha224(str(netFileName) + str(netFileSize)).hexdigest()
 
     oldNetFile = ""
     oldNetFileSize = ""
@@ -567,17 +572,19 @@ def graph_checkSerialized(netFile):
             f_line = serializedLogFile.readline()
         serializedLogFile.close()
 
-    return (serializedLogFileExist) and (netFile == oldNetFile) and (netFileSize == oldNetFileSize) and (hashString == oldHashString)
+    return serializedLogFileExist and (netFile == oldNetFile) and (netFileSize == oldNetFileSize) and (hashString == oldHashString)
 
 def mapping_checkSerialized(netFile, omnetFile, nbrVPA, radioRange):
+    netFileName = str(os.path.basename(netFile))
     netFileSize = str(os.path.getsize(netFile)).replace("L", "")
-    hashString = hashlib.sha224(str(netFile) + str(netFileSize)).hexdigest()
+    hashString = hashlib.sha224(str(netFileName) + str(netFileSize)).hexdigest()
 
-    oldNetFile = ""
+    oldNetFileName = ""
     oldNetFileSize = ""
     oldHashString = ""
 
-    oldOmnetFile = ""
+    omnetFileName = str(os.path.basename(omnetFile))
+    oldOmnetFileName = ""
 
     oldNbrVPA = 0
 
@@ -590,13 +597,13 @@ def mapping_checkSerialized(netFile, omnetFile, nbrVPA, radioRange):
         while f_line <> "":
             tokens = f_line.split(':')
             if tokens[0] == str("Network File"):
-                oldNetFile = tokens[1].replace("\n", "")
+                oldNetFileName = tokens[1].replace("\n", "")
             if tokens[0] == str("Network File Size in bytes"):
                 oldNetFileSize = tokens[1].replace("\n", "")
             if tokens[0] == str("Hash digest"):
                 oldHashString = tokens[1].replace("\n", "")
             if tokens[0] == str("Omnet File"):
-                oldOmnetFile = tokens[1].replace("\n", "")
+                oldOmnetFileName = tokens[1].replace("\n", "")
             if tokens[0] == str("Nbr VPA"):
                 oldNbrVPA = int(tokens[1].replace("\n", ""))
             if tokens[0] == str("Radio range"):
@@ -604,7 +611,7 @@ def mapping_checkSerialized(netFile, omnetFile, nbrVPA, radioRange):
             f_line = serializedLogFile.readline()
         serializedLogFile.close()
 
-    return serializedLogFileExist and (netFile == oldNetFile) and (netFileSize == oldNetFileSize) and (hashString == oldHashString) and (omnetFile == oldOmnetFile) and  (nbrVPA == oldNbrVPA) and (radioRange == oldRadioRange)
+    return serializedLogFileExist and (netFileName == oldNetFileName) and (netFileSize == oldNetFileSize) and (hashString == oldHashString) and (omnetFileName == oldOmnetFileName) and  (nbrVPA == oldNbrVPA) and (radioRange == oldRadioRange)
 
 def path_checkSerialized(nbrNodes, nbrEdges, nbrVPAs):
     oldNbrNodes = 0
@@ -825,10 +832,15 @@ def compute_NP_ALL(VPA_ID, Route,  Server_vars):
         dist), "[Route_NP_VPA]", str(edgedRoute_NP_VPA), "Service duration", service_time, "\n"
     route_as_string = ""
     for i, val in enumerate(edgedRoute_NP_VPA):
-        if i == 0:
-            route_as_string = val.decode().encode('utf-8')
+        edgeAndBestTravelTime = val.decode().encode('utf-8')+"="
+        if val == "ND":
+            edgeAndBestTravelTime += str(sys.maxint)
         else:
-            route_as_string = route_as_string + " " + val.decode().encode('utf-8')
+            edgeAndBestTravelTime += str(computeEdgeBTT(Graph, Dict_edges, val))
+        if i == 0:
+            route_as_string = edgeAndBestTravelTime
+        else:
+            route_as_string = route_as_string + " " + edgeAndBestTravelTime
     if edgedRoute_NP_VPA == []:
         route_as_string = " "
     msg = [str(constx.RESPONSE), str(constx.RESPONSE_NP_ALL), str(constx.EDGE_TO_NP), str(edgesOfNP[0]),
@@ -844,23 +856,26 @@ def compute_NP_ALL(VPA_ID, Route,  Server_vars):
             msg_as_string = msg_as_string + ";"
     return msg_as_string
 
-
-def compute_EDGE_BEST_TRAVEL_TIME(EDGE_ID, Server_vars):
-    Graph, Dict_edges = Server_vars[0], Server_vars[1]
+def computeEdgeBTT(G,dictEdges, edgeId):
     travelTime = sys.maxint
-    service_time = time.time()
     nodesOfEdge = ("", "")
-    nodesOfEdge = Dict_edges[EDGE_ID]
-    if (nodesOfEdge != ("", "")) and (Graph.has_edge(nodesOfEdge[0], nodesOfEdge[1])):
-        edges = Graph[nodesOfEdge[0]][nodesOfEdge[1]]
+    nodesOfEdge = dictEdges[edgeId]
+    if (nodesOfEdge != ("", "")) and (G.has_edge(nodesOfEdge[0], nodesOfEdge[1])):
+        edges = G[nodesOfEdge[0]][nodesOfEdge[1]]
         for j, val in edges.iteritems():
-            if val["label"] == EDGE_ID:
+            if val["label"] == edgeId:
                 if val["maxSpeed"] != 0.0:
                     travelTime = val["weight"] / val["maxSpeed"]
                 else:
                     raise ValueError("Edge Max Speed value equals 0.0")
     else:
         raise ValueError("Edge not found")
+    return travelTime
+
+def compute_EDGE_BEST_TRAVEL_TIME(EDGE_ID, Server_vars):
+    Graph, Dict_edges = Server_vars[0], Server_vars[1]
+    service_time = time.time()
+    travelTime = computeEdgeBTT(Graph,Dict_edges,EDGE_ID)
     service_time = time.time() - service_time
     print "[EDGE_ID]", str(EDGE_ID), "[EDGE_BEST_TRAVEL_TIME]", str(travelTime), "\n"
     msg = [str(constx.RESPONSE), str(constx.RESPONSE_EDGE_BEST_TRAVEL_TIME), str(constx.EDGE_BEST_TRAVEL_TIME),
@@ -1025,290 +1040,5 @@ def main(argv):
     server_socket.close()
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-    # mapped_VPA_length_dist = {}
-    #
-    # for i, val in enumerate(closeNeighborhoodIDs):
-    #     # if mapped_Type_VPA[i] != "Node":
-    #     if (neighborhoodType[i] == "None") or (neighborhoodType[i] == None):
-    #         continue
-    #     for j, val2 in enumerate(val):
-    #         if neighborhoodType[i] == "Node":
-    #             length, path = nx.single_source_dijkstra(G, val2[0])
-    #             # mapped_VPA_length_dist[val2[0]] = (length, path)
-    #         elif neighborhoodType[i] == "Edge":
-    #             fromNode = dict_edges[val2[0]][0]
-    #             length, path = nx.single_source_dijkstra(G, fromNode)
-    #             # mapped_VPA_length_dist[fromNode] = (length, path)
-    #             toNode = dict_edges[val2[0]][1]
-    #             length, path = nx.single_source_dijkstra(G, toNode)
-    #             # mapped_VPA_length_dist[toNode] = (length, path)
-    #
-    # end_time = time.time()
-    # print "Calculation duration:", str(end_time - start_time)
-
-
-    # def compute_NP_ALL(VPA_ID, Route):
-    #     service_time = time.time()
-    #     tokensForEdgedRoute = Route.split(' ')
-    #     edgedRoute = []
-    #     for j, val2 in enumerate(tokensForEdgedRoute):
-    #         edgedRoute.append(val2)
-    #     nodedRoute = nodesOfEdgedRoute(dict_edges, edgedRoute, WithFirstNode = False)
-    #     nearestNodes, dist, path = nearestNodeToVPA_dist_path(G, dict_edges, mapped_VPA[int(VPA_ID)],mapped_Type_VPA[int(VPA_ID)], mapped_VPA_length_dist,nodedRoute)
-    #     reversedPath = path[::-1]
-    #     edge_to_NP = " "
-    #     edge_from_NP = " "
-    #     for j, val2 in enumerate(edgedRoute):
-    #         if edge_to_NP != " " and edge_from_NP != " ":
-    #             break
-    #         if dict_edges[val2][0] == nearestNodes[1]:
-    #             edge_from_NP = val2.decode().encode('utf-8')
-    #         if dict_edges[val2][1] == nearestNodes[1]:
-    #             edge_to_NP = val2.decode().encode('utf-8')
-    #     edgesOfNP = edgesOfNearestPoint(edgedRoute, nearestNodes[1], dict_edges)
-    #     edgedRoute_NP_VPA, dist_NP_VPA = edgesOfNodedRoute(G, reversedPath, shortest=True)
-    #     if (dist_NP_VPA != dist):
-    #         print "Distance in the 2 direction are not the same\n"
-    #     # reversedPath.reverse()
-    #     service_time = time.time() - service_time
-    #     print "[VPA_NODE,NP_NODE]", str(nearestNodes), "[Edge->NP, NP->Edge]", edgesOfNP, "[Dist_NP_VPA]", str(
-    #         dist), "[Route_NP_VPA]", str(edgedRoute_NP_VPA), "Service duration", service_time, "\n"
-    #     route_as_string = ""
-    #     for i, val in enumerate(edgedRoute_NP_VPA):
-    #         if i == 0:
-    #             route_as_string = val.decode().encode('utf-8')
-    #         else:
-    #             route_as_string = route_as_string + " " + val.decode().encode('utf-8')
-    #     if edgedRoute_NP_VPA == []:
-    #         route_as_string = " "
-    #     msg = [str(constx.RESPONSE),str(constx.RESPONSE_NP_ALL),str(constx.EDGE_TO_NP),str(edgesOfNP[0]), str(constx.NODE_NP),str(nearestNodes[1]), str(constx.EDGE_FROM_NP),str(edgesOfNP[1]) , str(constx.NODE_VPA_MAPPING),str(nearestNodes[0]), str(constx.ROUTE_NP_VPA),str(route_as_string), str(constx.ROUTE_LENGTH_NP_VPA),str(float(dist_NP_VPA))]
-    #     msg_as_string = ""
-    #     for j in xrange(0, len(msg), 2):
-    #         msg_as_string = msg_as_string + msg[j].decode().encode('utf-8') + ":" + msg[j + 1].decode().encode('utf-8')
-    #         if j == len(msg)-2:
-    #             msg_as_string = msg_as_string+"#"
-    #         else:
-    #             msg_as_string = msg_as_string + ";"
-    #     return msg_as_string
-    #
-    # def compute_EDGE_BEST_TRAVEL_TIME(EDGE_ID):
-    #     travelTime = sys.maxint
-    #     service_time = time.time()
-    #     nodesOfEdge = ("","")
-    #     nodesOfEdge = dict_edges[EDGE_ID]
-    #     if (nodesOfEdge != ("","")) and (G.has_edge(nodesOfEdge[0],nodesOfEdge[1])):
-    #         edges = G[nodesOfEdge[0]][nodesOfEdge[1]]
-    #         for j, val in edges.iteritems():
-    #             if val["label"] == EDGE_ID:
-    #                 if val["maxSpeed"] != 0.0:
-    #                     travelTime = val["weight"] / val["maxSpeed"]
-    #                 else:
-    #                     raise ValueError("Edge Max Speed value equals 0.0")
-    #     else:
-    #         raise ValueError("Edge not found")
-    #     service_time = time.time() - service_time
-    #     print "[EDGE_ID]", str(EDGE_ID), "[EDGE_BEST_TRAVEL_TIME]", str(travelTime), "\n"
-    #     msg = [str(constx.RESPONSE),str(constx.RESPONSE_EDGE_BEST_TRAVEL_TIME),str(constx.EDGE_BEST_TRAVEL_TIME),str(float(travelTime))]
-    #     msg_as_string = ""
-    #     for j in xrange(0, len(msg), 2):
-    #         msg_as_string = msg_as_string + msg[j].decode().encode('utf-8') + ":" + msg[j + 1].decode().encode('utf-8')
-    #         if j == len(msg)-2:
-    #             msg_as_string = msg_as_string+"#"
-    #         else:
-    #             msg_as_string = msg_as_string + ";"
-    #     return msg_as_string
-
-#    sys.stdout = open("PyServerLog.txt", "w")
-
-
-
-    # CONNECTION_LIST = []  # list of socket clients
-    #
-    #
-    # # Add server socket to the list of readable connections
-    # CONNECTION_LIST.append(server_socket)
-    #
-    # while 1:
-    #     # Get the list sockets which are ready to be read through select
-    #     read_sockets, write_sockets, error_sockets = select.select(CONNECTION_LIST, [], [])
-    #
-    #     for sock in read_sockets:
-    #
-    #         # New connection
-    #         if sock == server_socket:
-    #             # Handle the case in which there is a new connection recieved through server_socket
-    #             sockfd, addr = server_socket.accept()
-    #             CONNECTION_LIST.append(sockfd)
-    #             print "Client (%s, %s) connected" % addr
-    #
-    #         # Some incoming message from a client
-    #         else:
-    #             # Data recieved from client, process it
-    #             try:
-    #                 # In Windows, sometimes when a TCP program closes abruptly,
-    #                 # a "Connection reset by peer" exception will be thrown
-    #                 data = sock.recv(RECV_BUFFER)
-    #                 if data == "CLOSE":
-    #                     print "Client (%s, %s) is going offline" % addr
-    #                     sock.close()
-    #                     CONNECTION_LIST.remove(sock)
-    #                     continue
-    #                 tmp_str = data
-    #                 tokens = tmp_str.split('#')
-    #                 for i, val in enumerate(tokens):
-    #                     if val == "":
-    #                         continue
-    #                     tokens_msg = val.split(';')
-    #                     # for j, val2 in enumerate(tokens_msg):
-    #                     tokens_command = tokens_msg[0].split(':')
-    #                     msg_type = int(tokens_command[0])
-    #                     cmd = int(tokens_command[1])
-    #                     tokens_args = []
-    #                     for j, val2 in enumerate(tokens_msg[1:]):
-    #                         tmp = val2.split(':')
-    #                         tokens_args.append(int(tmp[0]))
-    #                         tokens_args.append(tmp[1])
-    #                     if msg_type == constx.QUERY:
-    #                         if cmd in constx.KNOWN_QUERIES:
-    #                             cmd_format = constx.FORMAT_QUERIES[cmd]
-    #                             error = False
-    #                             if len(tokens_args) != len(cmd_format):
-    #                                 error = True
-    #                                 for j in xrange(2, len(tokens_args), 2):
-    #                                     if tokens_msg[j] != cmd_format[j]:
-    #                                         error = True
-    #                             if error:
-    #                                 raise ValueError("Error query format")
-    #                             if cmd == constx.CMD_NP_ALL:
-    #                                 response_msg = compute_NP_ALL(tokens_args[1], tokens_args[3])
-    #                                 sock.send(response_msg)
-    #                             elif cmd == constx.CMD_EDGE_BEST_TRAVEL_TIME:
-    #                                 response_msg = compute_EDGE_BEST_TRAVEL_TIME(tokens_args[1])
-    #                                 sock.send(response_msg)
-    #                     elif msg_type == constx.RESPONSE:
-    #                         print "Not supported for now"
-    #                     else:
-    #                         raise ValueError("unrecognazible msg type received")
-    #
-    #             # client disconnected, so remove from socket list
-    #             except:
-    #                 print "Client (%s, %s) is offline" % addr
-    #                 sock.close()
-    #                 CONNECTION_LIST.remove(sock)
-    #                 continue
-    #
-    # server_socket.close()
-
-    # conn, addr = server_socket.accept()
-    # while True:
-    #     print 'Connected by client', addr
-    #     data = conn.recv(4096)
-    #     if not data:
-    #         print ("no data")
-    #     else:
-    #         print 'Received data from client', data
-    #         if data == "CLOSE":
-    #             conn.close()
-    #         else:
-    #             tmp_str=data
-    #             tokens = tmp_str.split('#')
-    #             for i, val in enumerate(tokens):
-    #                 if val == "":
-    #                     continue
-    #                 tokens_msg = val.split(';')
-    #                 # for j, val2 in enumerate(tokens_msg):
-    #                 tokens_command = tokens_msg[0].split(':')
-    #                 msg_type = int(tokens_command[0])
-    #                 cmd = int(tokens_command[1])
-    #                 tokens_args =[]
-    #                 for j, val2 in enumerate(tokens_msg[1:]):
-    #                     tmp = val2.split(':')
-    #                     tokens_args.append(int(tmp[0]))
-    #                     tokens_args.append(tmp[1])
-    #                 if msg_type == constx.QUERY:
-    #                     if cmd in constx.KNOWN_QUERIES:
-    #                         cmd_format = constx.FORMAT_QUERIES[cmd]
-    #                         error = False
-    #                         if len(tokens_args) != len(cmd_format):
-    #                             error = True
-    #                             for j in xrange(2, len(tokens_args),2):
-    #                                 if tokens_msg[j] != cmd_format[j]:
-    #                                     error = True
-    #                         if error:
-    #                             raise ValueError("Error query format")
-    #                         if cmd == constx.CMD_NP_ALL:
-    #                             response_msg = compute_NP_ALL(tokens_args[1], tokens_args[3])
-    #                             conn.send(response_msg)
-    #                         elif cmd == constx.CMD_EDGE_BEST_TRAVEL_TIME:
-    #                             response_msg = compute_EDGE_BEST_TRAVEL_TIME(tokens_args[1])
-    #                             conn.send(response_msg)
-    #                 elif msg_type == constx.RESPONSE:
-    #                     print "Not supported for now"
-    #                 else:
-    #                     raise ValueError("unrecognazible msg type received")
-    #             # cmd_args = cmd.split(';')
-    #             # nbrArgs = len(cmd_args)
-    #             # print "nbr arguments", nbrArgs
-    #             # cmdID = cmd_args[0]
-    #             # print "command ID", cmdID
-    #             # # dist = dijkstraPathLength(G, cmd_args[1], cmd_args[2])
-    #             # # conn.send("Shortest distance between:"+str(cmd_args[1])+"&"+str(cmd_args[2])+"="+str(dist)+"\n")
-    #             # # conn.send('Thank you for connecting\n')
-    #             # vpa_index = cmd_args[1]
-    #             # tokensForEdgedRoute = cmd_args[2].split(' ')
-    #             # edgedRoute = []
-    #             # for j, val2 in enumerate(tokensForEdgedRoute):
-    #             #     edgedRoute.append(val2)
-    #             # nodedRoute = nodesOfEdgedRoute(dict_edges, edgedRoute)
-    #             # nearestNodes, dist, path = nearestNodeToVPA_dist_path(G, dict_edges, mapped_VPA[int(vpa_index)], mapped_Type_VPA[int(vpa_index)], mapped_VPA_length_dist, nodedRoute)
-    #             # # nearestNodes, dist = nearestNodeToVPA(G, dict_edges, mapped_VPA[int(vpa_index)], mapped_Type_VPA[int(vpa_index)], nodedRoute)
-    #             # service_time = time.time() - service_time
-    #             # reversedPath = path[::-1]
-    #             # edge_to_NP = ""
-    #             # edge_from_NP = ""
-    #             # for j, val2 in enumerate(edgedRoute):
-    #             #     if edge_to_NP != "" and edge_from_NP != "":
-    #             #         break
-    #             #     if dict_edges[val2][0] == nearestNodes[1]:
-    #             #         edge_from_NP = val2.decode().encode('utf-8')
-    #             #     if dict_edges[val2][1] == nearestNodes[1]:
-    #             #         edge_to_NP = val2.decode().encode('utf-8')
-    #             # edgesOfNP = edgesOfNearestPoint(edgedRoute, nearestNodes[1], dict_edges)
-    #             # edgedRoute_NP_VPA, dist_NP_VPA = edgesOfNodedRoute(G, reversedPath, shortest=True)
-    #             # if (dist_NP_VPA != dist):
-    #             #     print "Distance in the 2 direction are not the same\n"
-    #             # # reversedPath.reverse()
-    #             # print "[VPA_NODE,NP_NODE]", str(nearestNodes), "[Edge->NP, NP->Edge]", edgesOfNP,"[Dist_NP_VPA]", str(dist),"[Route_NP_VPA]", str(edgedRoute_NP_VPA) ,"Service duration", service_time,"\n"
-    #             # route_as_string = ""
-    #             # for i, val in enumerate(edgedRoute_NP_VPA):
-    #             #     if i == 0:
-    #             #         route_as_string = val.decode().encode('utf-8')
-    #             #     else:
-    #             #         route_as_string = route_as_string+" "+val.decode().encode('utf-8')
-    #             # # conn.send("[VPA_NODE]:"+str(nearestNodes[0])+";[NP_NODE]:"+str(nearestNodes[1])+";[NP_EdgeTo]:"+str(edgesOfNP[0])+";[NP_EdgeFm]:"+str(edgesOfNP[1])+";[Dist_NP_VPA]:"+str(dist)+";[Route_NP_VPA]:"+str(edgedRoute_NP_VPA))
-    #             # service_time = time.time() - service_time
-    #             # conn.send("[VPA_NODE]:" + str(nearestNodes[0]) + ";[NP_NODE]:" + str(nearestNodes[1]) + ";[NP_EdgeTo]:" + str(edgesOfNP[0]) + ";[NP_EdgeFm]:" + str(edgesOfNP[1]) + ";[Dist_NP_VPA]:" + str(dist) + ";[Route_NP_VPA]:" + str(route_as_string))
-    #             # conn.send("Shortest distance between:" + str(nearestNodes[0]) + "&" + str(nearestNodes[1]) + "=" + str(dist) + ":"+ str(edgedRoute_NP_VPA) +"NP Edges:"+ str(edgesOfNP) +";")
-    #             # conn.send('Thank you for connecting\n')
-
-        # conn.close()
 if __name__ == "__main__":
     main(sys.argv)
-
