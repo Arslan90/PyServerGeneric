@@ -431,7 +431,6 @@ def buildPathsForGraph(graph, edgeDict, map_list, map_type, nodesBySector):
                                     pathDistNodesBySector[node1][l].append(listLen)
                                     pathDistNodesBySector[node1][l].append(listPath)
                 sub_sub_start_time = time.time() - sub_sub_start_time
-                print "Building duration for sub nodes path of Sector n", k, ":", sub_sub_start_time
 
         # Save graph and edgeDict to a pickle file.
         serializedData = [pathDistNodesBySector]
@@ -553,7 +552,7 @@ def graph_checkSerialized(netFile):
     netFileSize = str(os.path.getsize(netFile)).replace("L", "")
     hashString = hashlib.sha224(str(netFileName) + str(netFileSize)).hexdigest()
 
-    oldNetFile = ""
+    oldNetFileName = ""
     oldNetFileSize = ""
     oldHashString = ""
 
@@ -564,7 +563,7 @@ def graph_checkSerialized(netFile):
         while f_line <> "":
             tokens = f_line.split(':')
             if tokens[0] == str("Network File"):
-                oldNetFile = tokens[1].replace("\n", "")
+                oldNetFileName = tokens[1].replace("\n", "")
             if tokens[0] == str("Network File Size in bytes"):
                 oldNetFileSize = tokens[1].replace("\n", "")
             if tokens[0] == str("Hash digest"):
@@ -572,7 +571,7 @@ def graph_checkSerialized(netFile):
             f_line = serializedLogFile.readline()
         serializedLogFile.close()
 
-    return serializedLogFileExist and (netFile == oldNetFile) and (netFileSize == oldNetFileSize) and (hashString == oldHashString)
+    return serializedLogFileExist and (netFileName == oldNetFileName) and (netFileSize == oldNetFileSize) and (hashString == oldHashString)
 
 def mapping_checkSerialized(netFile, omnetFile, nbrVPA, radioRange):
     netFileName = str(os.path.basename(netFile))

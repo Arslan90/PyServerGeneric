@@ -1,0 +1,1 @@
+Current serialized data corresponds to cologne(TAPAS003) scenario

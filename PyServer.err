@@ -1,4 +1,0 @@
-Traceback (most recent call last):
-  File "ProdServer.py", line 5, in <module>
-    import sumolib
-ImportError: No module named sumolib

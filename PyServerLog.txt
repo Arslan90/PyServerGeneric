@@ -1,5 +1,0 @@
-Nbr Nodes:116
-Nbr Edges:392
-Nbr VPAs:1(SUMO)1(OMNET)
-Nbr Mapped To Node:1To Edge:0To None:0
---- %s seconds ---: 0.148475170135
