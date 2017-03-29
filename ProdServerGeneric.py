@@ -1,7 +1,9 @@
 import os
 import sys
 import subprocess
-# import traci
+from reportlab.platypus.para import HotLink
+
+import traci
 
 import sumolib
 import math
@@ -508,7 +510,7 @@ def clientthread(conn, addr, buffer, serv_vars):
                             if error:
                                 raise ValueError("Error query format")
                             if cmd == constx.CMD_NP_ALL:
-                                response_msg = compute_NP_ALL(tokens_args[1], tokens_args[3], serv_vars)
+                                response_msg = compute_NP_ALL(tokens_args[1], tokens_args[3], tokens_args[5], serv_vars)
                                 conn.send(response_msg)
                             elif cmd == constx.CMD_EDGE_BEST_TRAVEL_TIME:
                                 response_msg = compute_EDGE_BEST_TRAVEL_TIME(tokens_args[1], serv_vars)
@@ -764,7 +766,7 @@ def checkVPANeighborhood(Graph,sumoVPAs,radioRange):
         # mapping_list.append(map)
     return neighborhoodIDs, neighborhoodType
 
-def selectVPACloseNeighbors(Graph, Dict_edges, neighborhoodIDs, neighborhoodType, nextNodeInRoute, nbrCloseNeighbors):
+def selectVPACloseNeighbors(Graph, Dict_edges, neighborhoodIDs, neighborhoodType, nextNodeInRoute, nbrCloseNeighbors, HotSpotMode):
     closeNeighborhoodIDs = []
     distances = []
     tmp = []
@@ -788,17 +790,22 @@ def selectVPACloseNeighbors(Graph, Dict_edges, neighborhoodIDs, neighborhoodType
                 tmp_list.append(obj)
                 tmp_set.add(obj[0])
         tmp = tmp_list
-    if len(neighborhoodIDs) <= nbrCloseNeighbors:
-        tmp = sorted(tmp, key=operator.itemgetter(2))
+    if HotSpotMode == "True":
+        if len(neighborhoodIDs) <= nbrCloseNeighbors:
+            tmp = sorted(tmp, key=operator.itemgetter(2))
+        else:
+            tmp = sorted(tmp, key=operator.itemgetter(2))[:nbrCloseNeighbors]
+    elif HotSpotMode == "False":
+        tmp = sorted(tmp, key=operator.itemgetter(1))[:1]
     else:
-        tmp = sorted(tmp, key=operator.itemgetter(2))[:nbrCloseNeighbors]
+        raise ValueError("Unhandled type for HotSpotMode");
     for k, (id, d, euclid_d) in enumerate(tmp):
         closeNeighborhoodIDs.append((id, d))
         distances.append((id, euclid_d))
     return closeNeighborhoodIDs, distances
 
 
-def compute_NP_ALL(VPA_ID, Route,  Server_vars):
+def compute_NP_ALL(VPA_ID, Route, HotSpotMode,  Server_vars):
     Graph, Dict_edges = Server_vars[0], Server_vars[1]
     VPA_Mapping, VPA_Mapping_Type, NbrClosestNbhr = Server_vars[3], Server_vars[2], Server_vars[4]
     pathDistNodesBySector = Server_vars[5]
@@ -816,7 +823,7 @@ def compute_NP_ALL(VPA_ID, Route,  Server_vars):
             edgedRoute.append(val2)
         nodedRoute = nodesOfEdgedRoute(Dict_edges, edgedRoute, WithFirstNode=False)
         nearestNodes, dist, path = nearestNodeToVPA_dist_path(Graph, Dict_edges, VPA_Mapping[int(VPA_ID)],
-                                                              VPA_Mapping_Type[int(VPA_ID)], nodedRoute, NbrClosestNbhr, int(VPA_ID), pathDistNodesBySector)
+                                                              VPA_Mapping_Type[int(VPA_ID)], nodedRoute, NbrClosestNbhr, HotSpotMode,  int(VPA_ID), pathDistNodesBySector)
         edgesOfNP = edgesOfNearestPoint(edgedRoute, nearestNodes[1], Dict_edges)
         if edgesOfNP[0] != "ND" and edgesOfNP[1] == "ND":
             print "Must find the edge outgoing from NP in direction of VPA"
@@ -948,11 +955,11 @@ def edgesOfNearestPoint(Route, NP_Node, edgeDict):
     edgesOfNP = (edge_to_NP, edge_from_NP)
     return edgesOfNP
 
-def nearestNodeToVPA_dist_path(Graph, edgesDict, map_list, map_type, nodedRoute, nbrCloseNeighbors, sectorId, pathDistNodesBySector):
+def nearestNodeToVPA_dist_path(Graph, edgesDict, map_list, map_type, nodedRoute, nbrCloseNeighbors, HotSpotMode, sectorId, pathDistNodesBySector):
     nearestNodes = ("ND","ND")
     nearestDist = sys.maxint
     nearestPath = "ND"
-    closeNeighborhoodIDs, distances = selectVPACloseNeighbors(Graph, edgesDict, map_list, map_type, nodedRoute[0], nbrCloseNeighbors)
+    closeNeighborhoodIDs, distances = selectVPACloseNeighbors(Graph, edgesDict, map_list, map_type, nodedRoute[0], nbrCloseNeighbors, HotSpotMode)
     for i, ndMapVPA in enumerate(closeNeighborhoodIDs):
         if (map_type == "None") or (map_type == None):
             break
@@ -1017,8 +1024,10 @@ def main(argv):
             NbrMappedToNodes += 1
         if val == "Edge":
             NbrMappedToEdges += 1
+            print("VPA[",i,"] : Edge")
         if (val == "None") or (val == None):
             NbrNotMapped += 1
+            print("VPA[", i, "] : None")
 
     print ("Nbr Mapped To Node: " + str(NbrMappedToNodes) + " To Edge: " + str(NbrMappedToEdges) + " To None: " + str(
         NbrNotMapped))
